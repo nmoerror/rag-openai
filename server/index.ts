@@ -138,7 +138,6 @@ If the answer is not fully contained in the CONTEXT, say: "I don’t have enough
     const completion = await client.chat.completions.create({
       model: ANSWER_MODEL,
       messages,
-      temperature: 0.1,
     });
 
     const content = completion.choices?.[0]?.message?.content ?? '';

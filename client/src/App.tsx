@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ask, listDocs, uploadFile, deleteDoc, fetchUrl } from './api';
+import SearchPanel from '@/components/SearchPanel';
 
 type Doc = { id: string; filename: string; size: number; uploadedAt: number; chunkCount: number }
 
@@ -62,7 +63,7 @@ export default function App(){
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', padding: 20, maxWidth: 900, margin: '0 auto' }}>
-      📚 RAG with OpenAI
+      {/*📚 RAG with OpenAI*/}
 
       <section style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
         <h2>Upload document</h2>
@@ -72,41 +73,6 @@ export default function App(){
           {busy ? 'Uploading…' : 'Upload'}
         </button>
       </section>
-
-      <section style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
-        <h2>Documents</h2>
-        {docs.length === 0 && <p>No documents yet.</p>}
-        <ul>
-          {docs.map(d => (
-            <li key={d.id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '6px 0' }}>
-              <span>• {d.filename} <small>({(d.size / 1024).toFixed(1)} KB, {d.chunkCount} chunks)</small></span>
-              <button onClick={() => onDelete(d.id)} disabled={busy} style={smallBtn}>Delete</button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/*<section style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>*/}
-      {/*  <h2>Ask</h2>*/}
-      {/*  <div style={{ display: 'flex', gap: 8 }}>*/}
-      {/*    <input*/}
-      {/*      value={q}*/}
-      {/*      onChange={e => setQ(e.target.value)}*/}
-      {/*      placeholder="Ask a question based on your docs…"*/}
-      {/*      style={{ flex: 1, padding: 10, borderRadius: 6, border: '1px solid #ccc' }}*/}
-      {/*    />*/}
-      {/*    <input*/}
-      {/*      type="number" value={k} min={1} max={20} onChange={e => setK(parseInt(e.target.value || '8'))}*/}
-      {/*      style={{ width: 70 }}*/}
-      {/*    />*/}
-      {/*    <button onClick={onAsk} disabled={busy} style={btn}>{busy ? 'Thinking…' : 'Ask'}</button>*/}
-      {/*  </div>*/}
-      {/*  {answer && (*/}
-      {/*    <div style={{ marginTop: 12, whiteSpace: 'pre-wrap', background: '#fafafa', padding: 12, borderRadius: 8 }}>*/}
-      {/*      {answer}*/}
-      {/*    </div>*/}
-      {/*  )}*/}
-      {/*</section>*/}
 
       <section style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
         <h2>Ingest from URL</h2>
@@ -122,33 +88,26 @@ export default function App(){
         </div>
         <p style={{ marginTop: 8 }}>The page text will be chunked & embedded with its domain saved for filtering.</p>
       </section>
+      <br/>
 
-      <section style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
-        <h2>Ask</h2>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <input
-            value={q} onChange={e => setQ(e.target.value)} placeholder="Ask a question…"
-            style={{ flex: 1, padding: 10, borderRadius: 6, border: '1px solid #ccc' }}
-          />
-          <input
-            type="number" value={k} min={1} max={20} onChange={e => setK(parseInt(e.target.value || '8'))}
-            style={{ width: 70 }}
-          />
-          <button onClick={() => onAsk()} disabled={busy} style={btn}>{busy ? 'Thinking…' : 'Ask'}</button>
-        </div>
-        <input
-          value={sitesText} onChange={e => setSitesText(e.target.value)}
-          placeholder="Limit to sites: nytimes.com, docs.python.org"
-          style={{ width: '100%', padding: 10, borderRadius: 6, border: '1px solid #ccc' }}
-        />
-        <small>Queries will only use chunks whose <code>domain</code> matches these sites.</small>
-        {answer && <div
-          style={{ marginTop: 12, whiteSpace: 'pre-wrap', background: '#fafafa', padding: 12, borderRadius: 8 }}
-        >{answer}</div>}
-      </section>
+      <SearchPanel
+        documents={[
+          { id: 'd1', name: 'Product Spec v2.pdf', sizeKB: 842, updatedAt: '2025-10-30T10:00:00Z' },
+          { id: 'd2', name: 'API Design.md', sizeKB: 34, updatedAt: '2025-10-29T16:00:00Z' },
+        ]}
+        sites={[
+          { id: 's1', url: 'https://openai.com', title: 'OpenAI' },
+          { id: 's2', url: 'https://vitejs.dev', title: 'Vite' },
+        ]}
+        onSearch={onAsk}
+        onAddDocument={onUpload}
+        onAddWebsite={onIngestUrl}
+      />
     </div>
 
+
   );
+
 }
 
 const btn: React.CSSProperties = {

@@ -77,7 +77,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     for (let i = 0; i < parts.length; i += 50) {
       const batch = parts.slice(i, i + 50);
-      const resp = await client.embeddings.create({ model: EMBEDDING_MODEL, input: batch });
+      const resp = await client.embeddings.create({ model: EMBEDDING_MODEL, input: batch, });
       // Map each returned embedding to its absolute index in `parts`
       resp.data.forEach((d, j) => {
         embeddings[i + j] = d.embedding;
@@ -138,6 +138,7 @@ If the answer is not fully contained in the CONTEXT, say: "I don’t have enough
     const completion = await client.chat.completions.create({
       model: ANSWER_MODEL,
       messages,
+      temperature: 1,
     });
 
     const content = completion.choices?.[0]?.message?.content ?? '';

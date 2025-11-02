@@ -65,30 +65,30 @@ export default function App(){
     <div style={{ fontFamily: 'system-ui, sans-serif', padding: 20, maxWidth: 900, margin: '0 auto' }}>
       {/*📚 RAG with OpenAI*/}
 
-      <section style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
-        <h2>Upload document</h2>
-        <p>PDF, TXT, or Markdown. The server will chunk + embed.</p>
-        <input type="file" accept=".pdf,.txt,.md,.markdown" onChange={e => setFile(e.target.files?.[0] || null)}/>
-        <button onClick={onUpload} disabled={!file || busy} style={btn}>
-          {busy ? 'Uploading…' : 'Upload'}
-        </button>
-      </section>
+      {/*<section style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>*/}
+      {/*  <h2>Upload document</h2>*/}
+      {/*  <p>PDF, TXT, or Markdown. The server will chunk + embed.</p>*/}
+      {/*  <input type="file" accept=".pdf,.txt,.md,.markdown" onChange={e => setFile(e.target.files?.[0] || null)}/>*/}
+      {/*  <button onClick={onUpload} disabled={!file || busy} style={btn}>*/}
+      {/*    {busy ? 'Uploading…' : 'Upload'}*/}
+      {/*  </button>*/}
+      {/*</section>*/}
 
-      <section style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>
-        <h2>Ingest from URL</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            value={urlToIngest} onChange={e => setUrlToIngest(e.target.value)}
-            placeholder="https://example.com/article"
-            style={{ flex: 1, padding: 10, borderRadius: 6, border: '1px solid #ccc' }}
-          />
-          <button onClick={onIngestUrl} disabled={busy} style={btn}>
-            {busy ? 'Fetching…' : 'Fetch & Index'}
-          </button>
-        </div>
-        <p style={{ marginTop: 8 }}>The page text will be chunked & embedded with its domain saved for filtering.</p>
-      </section>
-      <br/>
+      {/*<section style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8 }}>*/}
+      {/*  <h2>Ingest from URL</h2>*/}
+      {/*  <div style={{ display: 'flex', gap: 8 }}>*/}
+      {/*    <input*/}
+      {/*      value={urlToIngest} onChange={e => setUrlToIngest(e.target.value)}*/}
+      {/*      placeholder="https://example.com/article"*/}
+      {/*      style={{ flex: 1, padding: 10, borderRadius: 6, border: '1px solid #ccc' }}*/}
+      {/*    />*/}
+      {/*    <button onClick={onIngestUrl} disabled={busy} style={btn}>*/}
+      {/*      {busy ? 'Fetching…' : 'Fetch & Index'}*/}
+      {/*    </button>*/}
+      {/*  </div>*/}
+      {/*  <p style={{ marginTop: 8 }}>The page text will be chunked & embedded with its domain saved for filtering.</p>*/}
+      {/*</section>*/}
+      {/*<br/>*/}
 
       <SearchPanel
         documents={[

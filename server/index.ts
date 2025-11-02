@@ -15,7 +15,7 @@ import { Chunk, DocMeta } from './types';
 const PORT = 4000;
 const client = new OpenAI({
   maxRetries: 3,
-  apiKey: process.env.OPENAI_API_KEY || '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'
+  apiKey: process.env.OPENAI_API_KEY
 });
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'text-embedding-3-small';
 const ANSWER_MODEL = process.env.ANSWER_MODEL || 'gpt-5-mini-2025-08-07';

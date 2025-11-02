@@ -6,6 +6,10 @@
       "DOM"
     ],
     "jsx": "react-jsx",
+    "types": [
+      "vite/client",
+      "node"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "esModuleInterop": true,

@@ -12,10 +12,20 @@ export async function uploadFile(file: File){
   return r.json();
 }
 
-export async function ask(question: string, k = 8){
-  const r = await fetch(`${API}/ask`, {
+
+export async function fetchUrl(url: string){
+  const r = await fetch(`${API}/fetch-url`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, k })
+    body: JSON.stringify({ url })
+  });
+  return r.json();
+}
+
+export async function ask(question: string, k = 8, sites?: string[]){
+  const r = await fetch(`${API}/ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, k, sites })
   });
   return r.json();
 }

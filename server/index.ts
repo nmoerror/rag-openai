@@ -12,6 +12,18 @@ import { chunkText } from './chunk';
 import { addDoc, listDocs, removeDoc, topKSimilar } from './vectorStore';
 import { Chunk, DocMeta } from './types';
 
+import fetch from 'node-fetch';
+import { JSDOM } from 'jsdom';
+import { Readability } from '@mozilla/readability';
+
+function domainFromUrl(u: string){
+  try {
+    return new URL(u).hostname.replace(/^www\./, '');
+  } catch {
+    return undefined;
+  }
+}
+
 const PORT = 4000;
 const client = new OpenAI({
   maxRetries: 3,
@@ -27,6 +39,57 @@ const ALLOW_ORIGINS = (process.env.CORS_ORIGINS || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
+
+app.post('/api/fetch-url', express.json(), async (req, res) => {
+  try {
+    const { url } = req.body as { url?: string };
+    if (!url) return res.status(400).json({ error: 'Missing url' });
+
+    const dom = await (await fetch(url)).text();
+    const doc = new JSDOM(dom, { url });
+    const reader = new Readability(doc.window.document);
+    const article = reader.parse();
+    const text = (article?.textContent || '').trim();
+    if (!text) return res.status(400).json({ error: 'Could not extract readable text' });
+
+    const parts = chunkText(text);
+    const embeddings: number[][] = new Array(parts.length);
+    for (let i = 0; i < parts.length; i += 50) {
+      const batch = parts.slice(i, i + 50);
+      const resp = await client.embeddings.create({ model: EMBEDDING_MODEL, input: batch });
+      resp.data.forEach((d, j) => {
+        embeddings[i + j] = d.embedding;
+      });
+    }
+
+    const docId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const domain = domainFromUrl(url);
+
+    // @ts-ignore
+    const chunks: Chunk[] = parts.map((content, idx) => ({
+      id: `${docId}_${idx}`,
+      docId,
+      content,
+      embedding: embeddings[idx]!,
+      domain,
+    }));
+
+    const meta: DocMeta = {
+      id: docId,
+      filename: url,
+      size: text.length,
+      uploadedAt: Date.now(),
+      chunkCount: chunks.length,
+      domain,
+    };
+
+    addDoc(meta, chunks);
+    res.json({ ok: true, doc: meta });
+  } catch (e: any) {
+    console.error(e);
+    res.status(500).json({ error: e?.message || 'Fetch failed' });
+  }
+});
 
 app.use(cors({
   origin(origin, cb){
@@ -116,14 +179,14 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
 app.post('/api/ask', async (req, res) => {
   try {
-    const { question, k = 8 } = req.body as { question?: string; k?: number };
-    if (!question || !question.trim()) return res.status(400).json({ error: 'Missing question' });
+    const { question, k = 8, sites } = req.body as { question?: string; k?: number; sites?: string[] };
+    if (!question?.trim()) return res.status(400).json({ error: 'Missing question' });
 
     const emb = await client.embeddings.create({ model: EMBEDDING_MODEL, input: question });
     const queryEmbedding = emb.data?.[0]?.embedding;
     if (!queryEmbedding) return res.status(500).json({ error: 'Failed to create query embedding' });
 
-    const hits = topKSimilar(queryEmbedding, k);
+    const hits = topKSimilar(queryEmbedding, k, sites);
 
     const context = hits.map((h, i) => `# Chunk ${i + 1}\n${h.content}`).join('\n\n');
 

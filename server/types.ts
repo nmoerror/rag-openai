@@ -3,6 +3,7 @@ export type Chunk = {
   docId: string;
   content: string;
   embedding: number[];
+  domain?: string;
 };
 
 export type DocMeta = {
@@ -11,6 +12,8 @@ export type DocMeta = {
   size: number;
   uploadedAt: number;
   chunkCount: number;
+  domain?: string | undefined;
+  tags?: string[] | undefined;
 };
 
 export type StoreFile = {

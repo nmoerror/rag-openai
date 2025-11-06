@@ -45,6 +45,10 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  button {
+    cursor: pointer;
+  }
 }
 
 @theme inline {

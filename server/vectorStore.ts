@@ -1,12 +1,26 @@
 import fs from 'fs';
 import path from 'path';
-import { Chunk, DocMeta, StoreFile } from './types';
+import { Chunk, SourceMeta, StoreFile } from './types';
 
 const STORE_PATH = path.join(process.cwd(), 'data', 'store.json');
 
 function load(): StoreFile{
-  if (!fs.existsSync(STORE_PATH)) return { chunks: [], docs: [] };
+  if (!fs.existsSync(STORE_PATH)) return { chunks: [], sources: [], corpus: [] };
   return JSON.parse(fs.readFileSync(STORE_PATH, 'utf-8')) as StoreFile;
+}
+
+export function addCorpusToSource(sourceId: string, corpusName: string): SourceMeta | null{
+  const db = load();
+  const source = db.sources.find(d => d.id === sourceId);
+
+  if (!source) return null;
+
+  if (!source.corpusNames.includes(corpusName)) {
+    source.corpusNames.push(corpusName);
+    save(db);
+  }
+
+  return source;
 }
 
 function save(data: StoreFile){
@@ -14,23 +28,49 @@ function save(data: StoreFile){
   fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 2), 'utf-8');
 }
 
-export function addDoc(meta: DocMeta, chunks: Chunk[]){
+export function addSource(meta: SourceMeta, chunks: Chunk[]){
   const db = load();
-  db.docs = db.docs.filter(d => d.id !== meta.id).concat(meta);
+  db.sources = db.sources.filter(d => d.id !== meta.id).concat(meta);
   db.chunks = db.chunks.concat(chunks);
   save(db);
 }
 
-export function listDocs(): DocMeta[]{
-  return load().docs;
+export function listSources(): SourceMeta[]{
+  return load().sources;
 }
 
-export function removeDoc(docId: string){
+export function listCorpus(): { name: string; id: string }[]{
+  return load().corpus;
+}
+
+
+export function removeSource(sourceId: string){
   const db = load();
-  db.docs = db.docs.filter(d => d.id !== docId);
-  db.chunks = db.chunks.filter(c => c.docId !== docId);
+  db.sources = db.sources.filter(d => d.id !== sourceId);
+  db.chunks = db.chunks.filter(c => c.sourceId !== sourceId);
   save(db);
 }
+
+export function createCorpus(corpus: { name: string; id: string }){
+  const db = load();
+  db.corpus = db.corpus.concat(corpus);
+  save(db);
+
+  return true;
+}
+
+export function deleteCorpus(corpusName: string){
+  const db = load();
+
+  db.sources = db.sources.map(s => ({
+    ...s,
+    corpusNames: s.corpusNames.filter(c => c !== 'apple')
+  }));
+
+  db.corpus = db.corpus.filter(c => c.name !== corpusName);
+  save(db);
+}
+
 
 export function topKSimilar(
   queryEmbedding: number[],
@@ -63,4 +103,9 @@ function cosine(a: number[], b: number[]){
   }
   const denom = Math.sqrt(na) * Math.sqrt(nb);
   return denom > 0 ? dot / denom : 0;
+}
+
+export function getSource(sourceId: string): SourceMeta | undefined{
+  const db = load();
+  return db.sources.find(s => s.id === sourceId);
 }

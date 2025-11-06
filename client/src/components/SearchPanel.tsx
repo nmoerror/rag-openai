@@ -159,7 +159,6 @@ export default function SearchPanel({
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-r from-indigo-500/10 via-fuchsia-500/10 to-amber-500/10 blur-2xl"
         />
-
         <CardHeader className="pb-4 relative">
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight flex items-center gap-2">

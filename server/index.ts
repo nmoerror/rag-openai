@@ -5,16 +5,24 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import OpenAI from 'openai';
-// NOTE: pdf-parse has quirky typings; use require + cast to callable.
 import { PDFParse } from 'pdf-parse';
-
 import { chunkText } from './chunk';
-import { addDoc, listDocs, removeDoc, topKSimilar } from './vectorStore';
-import { Chunk, DocMeta } from './types';
-
+import {
+  addCorpusToSource,
+  addSource,
+  createCorpus,
+  deleteCorpus, getSource, listCorpus,
+  listSources,
+  removeSource,
+  topKSimilar
+} from './vectorStore';
+import { Chunk, SourceMeta } from './types';
 import fetch from 'node-fetch';
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
+import mime from 'mime-types';
+
+const UPLOADS_DIR = path.join(process.cwd(), 'data', 'uploads');
 
 function domainFromUrl(u: string){
   try {
@@ -42,12 +50,12 @@ const ALLOW_ORIGINS = (process.env.CORS_ORIGINS || '')
 
 app.post('/api/fetch-url', express.json(), async (req, res) => {
   try {
-    const { url } = req.body as { url?: string };
+    const { url, selectedCorpusName } = req.body as { url?: string, selectedCorpusName: string };
     if (!url) return res.status(400).json({ error: 'Missing url' });
 
     const dom = await (await fetch(url)).text();
-    const doc = new JSDOM(dom, { url });
-    const reader = new Readability(doc.window.document);
+    const source = new JSDOM(dom, { url });
+    const reader = new Readability(source.window.sourceument);
     const article = reader.parse();
     const text = (article?.textContent || '').trim();
     if (!text) return res.status(400).json({ error: 'Could not extract readable text' });
@@ -62,29 +70,31 @@ app.post('/api/fetch-url', express.json(), async (req, res) => {
       });
     }
 
-    const docId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const sourceId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const domain = domainFromUrl(url);
 
     // @ts-ignore
     const chunks: Chunk[] = parts.map((content, idx) => ({
-      id: `${docId}_${idx}`,
-      docId,
+      id: `${sourceId}_${idx}`,
+      sourceId,
       content,
       embedding: embeddings[idx]!,
       domain,
     }));
 
-    const meta: DocMeta = {
-      id: docId,
-      filename: url,
+    const meta: SourceMeta = {
+      id: sourceId,
+      name: url,
+      sourceType: 'website',
+      corpusNames: [selectedCorpusName],
       size: text.length,
       uploadedAt: Date.now(),
       chunkCount: chunks.length,
       domain,
     };
 
-    addDoc(meta, chunks);
-    res.json({ ok: true, doc: meta });
+    addSource(meta, chunks);
+    res.json({ ok: true, source: meta });
   } catch (e: any) {
     console.error(e);
     res.status(500).json({ error: e?.message || 'Fetch failed' });
@@ -105,42 +115,101 @@ const upload = multer({ dest: 'data/uploads' });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-app.get('/api/docs', (_req, res) => {
-  res.json({ docs: listDocs() });
+app.get('/api/sources', (_req, res) => {
+  res.json({ sources: listSources() });
 });
 
-app.delete('/api/docs/:id', (req, res) => {
-  removeDoc(req.params.id);
+app.delete('/api/sources/:id', (req, res) => {
+  removeSource(req.params.id);
   res.json({ ok: true });
+});
+
+app.delete('/api/corpus/:name', (req, res) => {
+  deleteCorpus(req.params.name);
+  res.json({ ok: true });
+});
+
+app.get('/api/corpus', (req, res) => {
+  res.json({ corpus: listCorpus() });
+});
+
+
+app.post('/api/corpus', (req, res) => {
+  try {
+    const { corpus } = req.body as { corpus: { name: string, id: string } };
+
+    const updated = createCorpus(corpus);
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Already exists' });
+    }
+    res.json({ ok: true });
+  } catch (e: any) {
+    console.error(e);
+    return res.status(500).json({ error: e?.message || 'Failed to add corpus' });
+  }
+});
+
+
+app.post('/api/sources/:id/corpus', async (req, res) => {
+  try {
+    const { corpusName } = req.body as { corpusName?: string };
+    const { id } = req.params;
+
+    if (!corpusName) {
+      return res.status(400).json({ error: 'Missing corpusName' });
+    }
+
+    const updated = addCorpusToSource(id, corpusName);
+    if (!updated) {
+      return res.status(404).json({ error: 'Source not found' });
+    }
+
+    return res.json({ ok: true, source: updated });
+  } catch (e: any) {
+    console.error(e);
+    return res.status(500).json({ error: e?.message || 'Failed to add corpusName' });
+  }
 });
 
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file' });
-    const { originalname, path: filePath, size } = req.file;
+
+    const { originalname, path: tempFilePath, size, mimetype } = req.file;
+    const { corpusName } = req.body;
 
     const ext = path.extname(originalname).toLowerCase();
     let text = '';
+
+    // 1) Extract text from the temporary uploaded file
     if (ext === '.pdf') {
-      const buffer = fs.readFileSync(filePath);
+      const buffer = fs.readFileSync(tempFilePath);
       const parsed = new PDFParse(new Uint8Array(buffer));
       const result = await parsed.getText();
       text = result.text;
-
     } else {
-      text = fs.readFileSync(filePath, 'utf-8');
+      // naive: treat as UTF-8 text file
+      text = fs.readFileSync(tempFilePath, 'utf-8');
     }
 
-    if (!text.trim()) return res.status(400).json({ error: 'Empty text extracted' });
+    if (!text.trim()) {
+      return res.status(400).json({ error: 'Empty text extracted' });
+    }
 
     const parts = chunkText(text);
 
     // Pre-size array to avoid undefined indexes and silence TS “possibly undefined”
     const embeddings: number[][] = new Array(parts.length);
 
+    // 2) Create embeddings in batches
     for (let i = 0; i < parts.length; i += 50) {
       const batch = parts.slice(i, i + 50);
-      const resp = await client.embeddings.create({ model: EMBEDDING_MODEL, input: batch, });
+      const resp = await client.embeddings.create({
+        model: EMBEDDING_MODEL,
+        input: batch,
+      });
+
       // Map each returned embedding to its absolute index in `parts`
       resp.data.forEach((d, j) => {
         embeddings[i + j] = d.embedding;
@@ -152,25 +221,44 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       return res.status(500).json({ error: 'Embedding generation mismatch' });
     }
 
-    const docId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // 3) Create source id
+    const sourceId = `${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+
+    // 4) Move file from Multer temp location to a permanent uploads dir
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    const storedFilename = `${sourceId}${ext || ''}`;
+    const storedPath = path.join(UPLOADS_DIR, storedFilename);
+
+    // If you prefer copy instead of move, use fs.copyFileSync
+    fs.renameSync(tempFilePath, storedPath);
+
+    // 5) Build chunks
     const chunks: Chunk[] = parts.map((content, idx) => ({
-      id: `${docId}_${idx}`,
-      docId,
+      id: `${sourceId}_${idx}`,
+      sourceId,
       content,
       embedding: embeddings[idx]!, // non-null after the check above
     }));
 
-    const meta: DocMeta = {
-      id: docId,
-      filename: originalname,
+    // 6) Build meta with filePath
+    const meta: SourceMeta = {
+      id: sourceId,
+      name: originalname,
+      sourceType: 'document',
       size,
+      corpusNames: corpusName ? [corpusName] : [],
       uploadedAt: Date.now(),
       chunkCount: chunks.length,
+      filePath: path.relative(process.cwd(), storedPath), // e.g. "data/uploads/123_abc.pdf"
+      mimeType: mimetype,
+      ext,
     };
 
-    addDoc(meta, chunks);
+    addSource(meta, chunks);
 
-    res.json({ ok: true, doc: meta });
+    res.json({ ok: true, source: meta });
   } catch (e: any) {
     console.error(e);
     res.status(500).json({ error: e?.message || 'Upload failed' });
@@ -191,7 +279,7 @@ app.post('/api/ask', async (req, res) => {
     const context = hits.map((h, i) => `# Chunk ${i + 1}\n${h.content}`).join('\n\n');
 
     const system = `You are a strict RAG assistant. Only answer using the provided CONTEXT.
-If the answer is not fully contained in the CONTEXT, say: "I don’t have enough information in the uploaded documents to answer that."`;
+If the answer is not fully contained in the CONTEXT, say: "I don’t have enough information in the uploaded sourceuments to answer that."`;
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: system },
@@ -210,6 +298,34 @@ If the answer is not fully contained in the CONTEXT, say: "I don’t have enough
     console.error(e);
     res.status(500).json({ error: e?.message || 'Ask failed' });
   }
+});
+
+
+app.get('/api/sources/:id/file', (req, res) => {
+  const { id } = req.params;
+  const source = getSource(id);
+
+  if (!source || !source.filePath) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  // Resolve to an absolute path
+  const absolutePath = path.isAbsolute(source.filePath)
+    ? source.filePath
+    : path.join(process.cwd(), source.filePath);
+
+  if (!fs.existsSync(absolutePath)) {
+    return res.status(404).json({ error: 'File not found on disk' });
+  }
+
+  const mimeType =
+    source.mimeType || mime.lookup(source.ext || '') || 'application/octet-stream';
+
+  res.setHeader('Content-Type', mimeType);
+  // Optionally make browser download instead of inline view:
+  // res.setHeader('Content-Disposition', `inline; filename="${source.name}"`);
+
+  fs.createReadStream(absolutePath).pipe(res);
 });
 
 app.listen(PORT, () => console.log(`API on http://localhost:${PORT}`));

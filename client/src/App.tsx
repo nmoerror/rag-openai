@@ -45,7 +45,12 @@ export const App: React.FC = () => {
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
 
   async function onIngestUrl(){
-    if (!urlToIngest.trim() || !selectedCorpusName) return;
+    if (!urlToIngest.trim()) return;
+
+    if (!selectedCorpusName) {
+      alert('Please create / select a corpus first');
+    }
+    
     setBusy(true);
     const resp = await fetchUrl(urlToIngest.trim(), selectedCorpusName);
     if (resp.error) alert(resp.error);

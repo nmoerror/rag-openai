@@ -63,11 +63,11 @@ export async function fetchUrl(url: string, selectedCorpusName: string){
   return r.json();
 }
 
-export async function ask(question: string, k = 8, sites?: string[]){
+export async function ask(question: string, k = 8, sites?: string[], corpusName?: string){
   const r = await fetch(`${API}/ask`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, k, sites })
+    body: JSON.stringify({ question, k, sites, corpusName })
   });
   return r.json();
 }

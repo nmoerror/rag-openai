@@ -11,10 +11,11 @@ export type SourceMeta = {
   size: number;
   uploadedAt: number;
   name: string;
-  sourceType: any;
+  sourceType: any; // 'document' | 'website'
   corpusNames: string[];
   chunkCount: number;
   domain?: string | undefined;
+  url?: string; // for sourceType = 'website'
   tags?: string[] | undefined;
   filePath?: string;
   mimeType?: string;

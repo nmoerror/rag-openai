@@ -30,8 +30,13 @@ function save(data: StoreFile){
 
 export function addSource(meta: SourceMeta, chunks: Chunk[]){
   const db = load();
-  db.sources = db.sources.filter(d => d.id !== meta.id).concat(meta);
-  db.chunks = db.chunks.concat(chunks);
+
+  console.log(11111111, meta);
+  db.sources = db.sources?.filter(d => d.name !== meta.name)?.concat(meta);
+  if (meta?.sourceType !== 'website') {
+    db.chunks = (db.chunks || []).concat(chunks);
+  }
+
   save(db);
 }
 
@@ -46,8 +51,8 @@ export function listCorpus(): { name: string; id: string }[]{
 
 export function removeSource(sourceId: string){
   const db = load();
-  db.sources = db.sources.filter(d => d.id !== sourceId);
-  db.chunks = db.chunks.filter(c => c.sourceId !== sourceId);
+  db.sources = db.sources?.filter(d => d.id !== sourceId);
+  db.chunks = db.chunks?.filter(c => c.sourceId !== sourceId);
   save(db);
 }
 
@@ -62,12 +67,12 @@ export function createCorpus(corpus: { name: string; id: string }){
 export function deleteCorpus(corpusName: string){
   const db = load();
 
-  db.sources = db.sources.map(s => ({
+  db.sources = db.sources?.map(s => ({
     ...s,
-    corpusNames: s.corpusNames.filter(c => c !== 'apple')
+    corpusNames: s.corpusNames?.filter(c => c !== 'apple')
   }));
 
-  db.corpus = db.corpus.filter(c => c.name !== corpusName);
+  db.corpus = db.corpus?.filter(c => c.name !== corpusName);
   save(db);
 }
 
@@ -78,14 +83,34 @@ export function topKSimilar(
   domains?: string[]
 ): Chunk[]{
   const db = load();
-  const normDomains = (domains ?? []).map(d => d.toLowerCase().trim()).filter(Boolean);
+  const normDomains = (domains ?? [])?.map(d => d.toLowerCase().trim())?.filter(Boolean);
   const pool = normDomains.length
-    ? db.chunks.filter(c => c.domain && normDomains.includes(c.domain.toLowerCase()))
+    ? db.chunks?.filter(c => c.domain && normDomains.includes(c.domain.toLowerCase()))
     : db.chunks;
 
-  const scored = pool.map(c => ({ c, score: cosine(queryEmbedding, c.embedding) }));
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, k).map(s => s.c);
+  const scored = pool?.map(c => ({ c, score: cosine(queryEmbedding, c.embedding) }));
+  scored?.sort((a, b) => b.score - a.score);
+  return scored?.slice(0, k)?.map(s => s.c);
+}
+
+export function topKSimilarByCorpus(
+  queryEmbedding: number[],
+  k: number,
+  corpusName: string
+): Chunk[]{
+  const db = load();
+  const corpus = (corpusName || '').trim();
+  // Build set of sourceIds that belong to the corpus
+  const allowedSourceIds = new Set(
+    db.sources
+      ?.filter(s => s.corpusNames?.includes(corpus))
+      ?.map(s => s.id)
+  );
+
+  const pool = db.chunks?.filter(c => allowedSourceIds?.has(c.sourceId));
+  const scored = pool?.map(c => ({ c, score: cosine(queryEmbedding, c.embedding) }));
+  scored?.sort((a, b) => b.score - a.score);
+  return scored?.slice(0, k)?.map(s => s.c);
 }
 
 // Safe cosine that tolerates length mismatch and noUncheckedIndexedAccess

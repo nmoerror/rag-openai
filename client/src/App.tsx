@@ -178,7 +178,7 @@ export const App: React.FC = () => {
     setInput('');
     setBusy(true);
 
-    const resp = await ask(input, k, sites);
+    const resp = await ask(input, k, sites, selectedCorpusName);
     if (resp.error) alert(resp.error);
 
     setBusy(false);

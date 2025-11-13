@@ -30,6 +30,12 @@ const SideBar = ({
   handleOpenDocument
 }: SideBarProps) => {
 
+  const filteredSources = selectedCorpusName
+    ? sourcesForSidebar.filter(src =>
+      src.corpusNames?.includes(selectedCorpusName)
+    )
+    : [];
+
   return (
     <aside className="w-80 border-r border-gray-200 bg-white flex flex-col shadow-sm">
       <div className="p-4 border-b border-gray-200">
@@ -89,11 +95,13 @@ const SideBar = ({
           </button>
         </div>
 
-        {sourcesForSidebar.length === 0 ? (
-          <p className="text-xs text-gray-400">No sources yet</p>
+        {filteredSources.length === 0 ? (
+          <p
+            className="text-xs text-gray-400"
+          >{selectedCorpusName ? `No sources saved under ${selectedCorpusName}` : 'Select a Corpus to begin'}</p>
         ) : (
           <ul className="space-y-2">
-            {sourcesForSidebar.map(src => {
+            {filteredSources.map(src => {
               const isInCorpus =
                 !!(selectedCorpusName && src?.corpusNames?.includes(selectedCorpusName));
               return (

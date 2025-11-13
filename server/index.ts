@@ -261,7 +261,7 @@ app.post('/api/ask', async (req, res) => {
 
     const context = hits?.map((h, i) => `# Chunk ${i + 1}\n${h.content}`).join('\n\n');
 
-    const system = `You are a strict RAG assistant. Only answer using the provided CONTEXT.
+    const system = `You are a strict RAG assistant and always respond in 50 words or less. Only answer using the provided CONTEXT.
 If the answer is not fully contained in the CONTEXT, say: "I don’t have enough information in the uploaded documents to answer that."`;
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [

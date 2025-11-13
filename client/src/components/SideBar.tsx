@@ -39,8 +39,8 @@ const SideBar = ({
   return (
     <aside className="w-80 border-r border-gray-200 bg-white flex flex-col shadow-sm">
       <div className="p-4 border-b border-gray-200">
-        <h1 className="text-base font-semibold text-gray-800">Knowledge Workspace</h1>
-        <p className="text-xs text-gray-500">Manage corpus and sources</p>
+        <h1 className="text-base font-semibold text-gray-800">AKIN AI</h1>
+        <p className="text-xs text-gray-500"></p>
       </div>
       {/* Corpus */}
       <div className="p-4 border-b border-gray-200">

@@ -14,7 +14,6 @@ package-lock.json
 # Build outputs
 dist/
 build/
-data/store.json
 
 # Logs
 logs
@@ -29,7 +28,6 @@ Thumbs.db
 .idea/
 
 # Upload temp
-data/uploads/
 
 # Vite cache
 client/.vite/

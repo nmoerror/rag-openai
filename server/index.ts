@@ -32,11 +32,11 @@ function domainFromUrl(u: string){
 
 const PORT = 4000;
 const client = new OpenAI({
-  maxRetries: 3,
+  maxRetries: 1,
   apiKey: process.env.OPENAI_API_KEY
 });
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'text-embedding-3-small';
-const ANSWER_MODEL = process.env.ANSWER_MODEL || 'gpt-5-mini-2025-08-07';
+const ANSWER_MODEL = process.env.ANSWER_MODEL || 'gpt-5-nano-2025-08-07';
 
 const app = express();
 
@@ -242,7 +242,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
 app.post('/api/ask', async (req, res) => {
   try {
-    const { question, k = 8, corpusName } = req.body as {
+    const { question, k = 4, corpusName } = req.body as {
       question?: string;
       k?: number;
       sites?: string[];
@@ -284,6 +284,7 @@ If the answer is not fully contained in the websites and documents given, say: "
       model: ANSWER_MODEL,
       // Responses API uses `instructions` for system and `input` for content
       instructions: system,
+      reasoning: { effort: 'low' },
       input: [
         {
           role: 'user',
@@ -312,6 +313,105 @@ If the answer is not fully contained in the websites and documents given, say: "
   } catch (e: any) {
     console.error(e);
     res.status(500).json({ error: e?.message || 'Ask failed' });
+  }
+});
+
+// Streaming variant for faster perceived latency
+app.post('/api/ask-stream', async (req, res) => {
+  try {
+    const { question, k = 4, corpusName } = req.body as {
+      question?: string;
+      k?: number;
+      corpusName?: string;
+    };
+    if (!question?.trim()) return res.status(400).json({ error: 'Missing question' });
+
+    const emb = await client.embeddings.create({ model: EMBEDDING_MODEL, input: question });
+    const queryEmbedding = emb.data?.[0]?.embedding;
+    if (!queryEmbedding) return res.status(500).json({ error: 'Failed to create query embedding' });
+
+    const system = `You are a strict RAG assistant. Only answer using the provided websites and documents. Respond with no more than 50 words. Do not exceed this limit. If the answer would be longer, summarize concisely.
+If the answer is not fully contained in the websites and documents given, say: "I don’t have enough information in the uploaded documents to answer that."`;
+
+    const allowedDomainsSet = new Set<string>();
+    const corpus = (corpusName || '').trim();
+    if (corpus) {
+      for (const s of listSources()) {
+        if (s.sourceType === 'website' && s.corpusNames?.includes(corpus)) {
+          const d = (s.domain || (s.url ? domainFromUrl(s.url) : undefined))?.toLowerCase();
+          if (d) allowedDomainsSet.add(d);
+        }
+      }
+    }
+    const allowed_domains = Array.from(allowedDomainsSet);
+
+    const rawHits = corpusName
+      ? topKSimilarByCorpus(queryEmbedding, k, corpusName)
+      : topKSimilar(queryEmbedding, k, allowed_domains);
+
+    function cosine(a: number[], b: number[]){
+      const len = Math.min(a.length, b.length);
+      let dot = 0, na = 0, nb = 0;
+      for (let i = 0; i < len; i++) {
+        const av = a[i] ?? 0;
+        const bv = b[i] ?? 0;
+        dot += av * bv;
+        na += av * av;
+        nb += bv * bv;
+      }
+      const denom = Math.sqrt(na) * Math.sqrt(nb);
+      return denom > 0 ? dot / denom : 0;
+    }
+
+    const scored = (rawHits || []).map(h => ({ h, score: cosine(queryEmbedding, h.embedding) }));
+    scored.sort((a, b) => b.score - a.score);
+    const SIM_THRESHOLD = 0.78;
+    const MAX_CHUNKS = Math.min(k ?? 4, 4);
+    const filtered = scored.filter(s => (s.score ?? 1) >= SIM_THRESHOLD).slice(0, MAX_CHUNKS).map(s => s.h);
+
+    const context = filtered
+      ?.map((h, i) => `# Chunk ${i + 1}\n${(h.content || '').slice(0, 1200)}`)
+      .join('\n\n');
+
+    const reqBody: any = {
+      model: ANSWER_MODEL,
+      instructions: system,
+      input: [
+        { role: 'user', content: `CONTEXT:\n\n${context}\n\nQUESTION: ${question}` },
+      ],
+      temperature: 1,
+      'stream': true,
+    };
+
+    if ((filtered?.length ?? 0) === 0 && allowed_domains.length) {
+      (reqBody as any).tools = [{ type: 'web_search', filters: { allowed_domains } }];
+    }
+
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    (res as any).flushHeaders?.();
+
+    const stream = await client.responses.create(reqBody);
+    //@ts-ignore
+    for await (const event of stream) {
+      const chunk = event?.delta?.content?.[0]?.text ?? '';
+      if (chunk) {
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      }
+    }
+    res.write(`data: "[DONE]"\n\n`);
+    res.end();
+  } catch (e: any) {
+    console.error(e);
+    // In SSE, send an error event then end
+    try {
+      res.write(`event: error\n`);
+      res.write(`data: ${JSON.stringify(e?.message || 'Ask failed')}\n\n`);
+    } catch {
+    }
+    res.end();
   }
 });
 

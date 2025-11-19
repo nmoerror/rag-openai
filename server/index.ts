@@ -242,7 +242,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
 app.post('/api/ask', async (req, res) => {
   try {
-    const { question, k = 8, sites, corpusName } = req.body as {
+    const { question, k = 8, corpusName } = req.body as {
       question?: string;
       k?: number;
       sites?: string[];
@@ -254,20 +254,10 @@ app.post('/api/ask', async (req, res) => {
     const queryEmbedding = emb.data?.[0]?.embedding;
     if (!queryEmbedding) return res.status(500).json({ error: 'Failed to create query embedding' });
 
-    // RAG hits limited by selected corpus when provided
-    const hits = corpusName
-      ? topKSimilarByCorpus(queryEmbedding, k, corpusName)
-      : topKSimilar(queryEmbedding, k, sites);
 
-    const context = hits?.map((h, i) => `# Chunk ${i + 1}\n${h.content}`).join('\n\n');
+    const system = `You are a strict RAG assistant. Only answer using the provided websites and documents. Respond with no more than 50 words. Do not exceed this limit. If the answer would be longer, summarize concisely.
+If the answer is not fully contained in the websites and documents given, say: "I don’t have enough information in the uploaded documents to answer that."`;
 
-    const system = `You are a strict RAG assistant. Only answer using the provided CONTEXT. Respond with no more than 50 words. Do not exceed this limit. If the answer would be longer, summarize concisely.
-If the answer is not fully contained in the CONTEXT, say: "I don’t have enough information in the uploaded documents to answer that."`;
-
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: system },
-      { role: 'user', content: `CONTEXT:\n\n${context}\n\nQUESTION: ${question}` },
-    ];
 
     // Build allowed_domains strictly from website sources in the selected corpus
     const allowedDomainsSet = new Set<string>();
@@ -281,6 +271,13 @@ If the answer is not fully contained in the CONTEXT, say: "I don’t have enough
       }
     }
     const allowed_domains = Array.from(allowedDomainsSet);
+
+    // RAG hits limited by selected corpus when provided
+    const hits = corpusName
+      ? topKSimilarByCorpus(queryEmbedding, k, corpusName)
+      : topKSimilar(queryEmbedding, k, allowed_domains);
+
+    const context = hits?.map((h, i) => `# Chunk ${i + 1}\n${h.content}`).join('\n\n');
 
     // Use Responses API so tools like web_search actually execute
     const reqBody: any = {
@@ -300,18 +297,13 @@ If the answer is not fully contained in the CONTEXT, say: "I don’t have enough
     const tools: any[] = [];
     if (allowed_domains.length) {
       tools.push({ type: 'web_search', filters: { allowed_domains } });
-    } else if ((sites?.length ?? 0) > 0) {
-      // Fallback: if explicit sites were provided in the request, scope to them
-      const norm = (sites || [])
-        .map((s) => s?.toLowerCase()?.trim())
-        .filter(Boolean);
-      if (norm.length) tools.push({ type: 'web_search', filters: { allowed_domains: norm } });
     } else {
       // If nothing specified, still allow web search broadly to complement local RAG
       tools.push({ type: 'web_search' });
     }
 
     if (tools.length) (reqBody as any).tools = tools;
+
 
     const response = await (client.responses.create as any)(reqBody);
 

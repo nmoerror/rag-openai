@@ -297,9 +297,6 @@ If the answer is not fully contained in the websites and documents given, say: "
     const tools: any[] = [];
     if (allowed_domains.length) {
       tools.push({ type: 'web_search', filters: { allowed_domains } });
-    } else {
-      // If nothing specified, still allow web search broadly to complement local RAG
-      tools.push({ type: 'web_search' });
     }
 
     if (tools.length) (reqBody as any).tools = tools;
